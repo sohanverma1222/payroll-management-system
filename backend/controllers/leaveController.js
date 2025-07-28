@@ -4,9 +4,10 @@ const {
   errorResponse, 
   createdResponse, 
   badRequestResponse,
-  notFoundResponse 
+  notFoundResponse,
+  paginatedResponse
 } = require('../utils/response');
-const { getPaginationOptions, paginate } = require('../utils/pagination');
+const { getPaginationOptions, paginateQuery } = require('../utils/pagination');
 const mongoose = require('mongoose');
 
 // Apply for leave
@@ -195,16 +196,24 @@ const getLeaves = async (req, res) => {
       ];
     }
 
-    // Execute query with pagination
-    const leaveQuery = Leave.find(query)
-      .populate('employee', 'firstName lastName employeeId department')
-      .populate('employee.department', 'name')
-      .populate('approvedBy', 'firstName lastName')
-      .sort({ appliedDate: -1 });
+    // Use paginateQuery utility
+    const options = {
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 10,
+      sort: { appliedDate: -1 },
+      populate: [
+        {
+          path: 'employee',
+          select: 'firstName lastName employeeId department',
+          populate: { path: 'department', select: 'name code' }
+        },
+        { path: 'approvedBy', select: 'firstName lastName' }
+      ]
+    };
 
-    const result = await paginate(leaveQuery, paginationOptions);
+    const result = await paginateQuery(Leave, query, options);
 
-    return successResponse(res, result, 'Leave applications retrieved successfully');
+    return paginatedResponse(res, result.data, result.pagination, 'Leave applications retrieved successfully');
 
   } catch (error) {
     console.error('Get leaves error:', error);

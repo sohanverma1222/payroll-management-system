@@ -4,9 +4,10 @@ const {
   errorResponse, 
   createdResponse, 
   badRequestResponse,
-  notFoundResponse 
+  notFoundResponse,
+  paginatedResponse
 } = require('../utils/response');
-const { getPaginationOptions, paginate } = require('../utils/pagination');
+const { getPaginationOptions, paginateQuery } = require('../utils/pagination');
 const mongoose = require('mongoose');
 
 // Check-in employee
@@ -158,8 +159,16 @@ const checkOut = async (req, res) => {
 // Get attendance records with filtering and pagination
 const getAttendance = async (req, res) => {
   try {
-    const { page, limit, startDate, endDate, employeeId, status } = req.query;
-    const paginationOptions = getPaginationOptions(req);
+    const { 
+      page = 1, 
+      limit = 10, 
+      startDate, 
+      endDate, 
+      employeeId, 
+      status, 
+      department,
+      search 
+    } = req.query;
 
     // Build query
     const query = {};
@@ -175,12 +184,33 @@ const getAttendance = async (req, res) => {
       }
     }
 
-    // Employee filter
+    // Employee filter with search support
     if (employeeId) {
       query.employee = employeeId;
+    } else if (search || department) {
+      // Find employees matching search criteria
+      const employeeQuery = {};
+      
+      if (search) {
+        const searchRegex = new RegExp(search, 'i');
+        employeeQuery.$or = [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { employeeId: searchRegex }
+        ];
+      }
+      
+      if (department) {
+        employeeQuery.department = department;
+      }
+      
+      if (Object.keys(employeeQuery).length > 0) {
+        const employees = await Employee.find(employeeQuery).select('_id');
+        query.employee = { $in: employees.map(emp => emp._id) };
+      }
     }
 
-    // Status filter (present, absent, partial)
+    // Status filter (present, absent, partial, late, half_day)
     if (status) {
       switch (status) {
         case 'present':
@@ -188,24 +218,36 @@ const getAttendance = async (req, res) => {
           query.checkOutTime = { $ne: null };
           break;
         case 'partial':
+        case 'half_day':
           query.checkInTime = { $ne: null };
           query.checkOutTime = null;
           break;
         case 'absent':
           query.checkInTime = null;
           break;
+        case 'late':
+          query.isLate = true;
+          break;
       }
     }
 
-    // Execute query with pagination
-    const attendanceQuery = Attendance.find(query)
-      .populate('employee', 'firstName lastName employeeId department')
-      .populate('employee.department', 'name')
-      .sort({ date: -1, checkInTime: -1 });
+    // Use paginateQuery utility
+    const options = {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      sort: { date: -1, checkInTime: -1 },
+      populate: [
+        { 
+          path: 'employee', 
+          select: 'firstName lastName employeeId department',
+          populate: { path: 'department', select: 'name code' }
+        }
+      ]
+    };
 
-    const result = await paginate(attendanceQuery, paginationOptions);
+    const result = await paginateQuery(Attendance, query, options);
 
-    return successResponse(res, result, 'Attendance records retrieved successfully');
+    return paginatedResponse(res, result.data, result.pagination, 'Attendance records retrieved successfully');
 
   } catch (error) {
     console.error('Get attendance error:', error);

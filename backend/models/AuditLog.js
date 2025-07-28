@@ -32,7 +32,10 @@ const auditLogSchema = new mongoose.Schema({
       'payroll_calculate', 'payroll_approve', 'payroll_generate', 'payroll_pay',
       
       // System Actions
-      'settings_update', 'backup_create', 'backup_restore', 'system_maintenance',
+      'settings_update', 'backup_create', 'backup_restore', 'system_maintenance', 'system_access',
+      
+      // Search Actions
+      'search', 'search_global', 'search_advanced',
       
       // Other Actions
       'report_generate', 'report_export', 'file_upload', 'file_delete'

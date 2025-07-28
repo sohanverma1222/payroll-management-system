@@ -58,3 +58,13 @@ dist/
 # Temporary files
 tmp/
 temp/
+
+# Clacky-specific configuration
+.clackyai/
+.1024
+.environments.yaml
+
+# Development tools
+.vscode/
+.history/
+clacky-debug.log

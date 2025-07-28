@@ -70,6 +70,7 @@ try {
   app.use('/api/payroll', require('./routes/payroll'));
   app.use('/api/reports', require('./routes/reports'));
   app.use('/api/settings', require('./routes/settings'));
+  app.use('/api/search', require('./routes/search'));
 } catch (error) {
   console.error('Error loading routes:', error.message);
 }
@@ -108,7 +109,7 @@ app.use('*', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.BACKEND_PORT || process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

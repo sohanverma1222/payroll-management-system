@@ -171,6 +171,18 @@ const getDateRangeParams = (req, dateField = 'createdAt') => {
   return { [dateField]: dateFilter };
 };
 
+// Get pagination options from request query
+const getPaginationOptions = (req) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  
+  return {
+    page: Math.max(1, page),
+    limit: Math.min(100, Math.max(1, limit)),
+    skip: (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit))
+  };
+};
+
 module.exports = {
   calculatePagination,
   aggregatePagination,
@@ -179,5 +191,6 @@ module.exports = {
   getSortParams,
   getSearchParams,
   getFilterParams,
-  getDateRangeParams
+  getDateRangeParams,
+  getPaginationOptions
 };

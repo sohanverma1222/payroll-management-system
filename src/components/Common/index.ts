@@ -4,6 +4,8 @@ export { default as Input } from './Input';
 export { default as Card } from './Card';
 export { default as Modal } from './Modal';
 export { default as Table } from './Table';
+export { default as SearchBar } from './SearchBar';
+export { default as AdvancedFilters } from './AdvancedFilters';
 
 // Export common types
 export type { default as ButtonProps } from './Button';

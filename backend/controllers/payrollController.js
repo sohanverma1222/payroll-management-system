@@ -4,9 +4,10 @@ const {
   errorResponse, 
   createdResponse, 
   badRequestResponse,
-  notFoundResponse 
+  notFoundResponse,
+  paginatedResponse
 } = require('../utils/response');
-const { getPaginationOptions, paginate } = require('../utils/pagination');
+const { getPaginationOptions, paginateQuery } = require('../utils/pagination');
 const mongoose = require('mongoose');
 
 // Generate payroll for a specific employee and month
@@ -241,15 +242,18 @@ const getWorkingDays = (startDate, endDate) => {
 const getPayrolls = async (req, res) => {
   try {
     const { 
-      page, 
-      limit, 
+      page = 1, 
+      limit = 10, 
       month, 
       year, 
       employeeId, 
       status, 
-      search 
+      search,
+      department,
+      payrollPeriod,
+      startDate,
+      endDate
     } = req.query;
-    const paginationOptions = getPaginationOptions(req);
     
     // Build query
     const query = {};
@@ -264,9 +268,64 @@ const getPayrolls = async (req, res) => {
       query.year = parseInt(year);
     }
 
-    // Employee filter
+    // Payroll period filter
+    if (payrollPeriod) {
+      const now = new Date();
+      switch (payrollPeriod) {
+        case 'current_month':
+          query.month = now.getMonth() + 1;
+          query.year = now.getFullYear();
+          break;
+        case 'last_month':
+          const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          query.month = lastMonth.getMonth() + 1;
+          query.year = lastMonth.getFullYear();
+          break;
+        case 'current_quarter':
+          const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+          const quarterStart = (currentQuarter - 1) * 3 + 1;
+          const quarterEnd = currentQuarter * 3;
+          query.month = { $gte: quarterStart, $lte: quarterEnd };
+          query.year = now.getFullYear();
+          break;
+        case 'current_year':
+          query.year = now.getFullYear();
+          break;
+      }
+    }
+
+    // Date range filter for custom periods
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      query['payPeriod.startDate'] = { $gte: start };
+      query['payPeriod.endDate'] = { $lte: end };
+    }
+
+    // Employee filter with search and department support
     if (employeeId) {
       query.employee = employeeId;
+    } else if (search || department) {
+      // Find employees matching search criteria
+      const employeeQuery = {};
+      
+      if (search) {
+        const searchRegex = new RegExp(search, 'i');
+        employeeQuery.$or = [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { employeeId: searchRegex }
+        ];
+      }
+      
+      if (department) {
+        employeeQuery.department = department;
+      }
+      
+      if (Object.keys(employeeQuery).length > 0) {
+        const employees = await Employee.find(employeeQuery).select('_id');
+        query.employee = { $in: employees.map(emp => emp._id) };
+      }
     }
 
     // Status filter
@@ -274,31 +333,25 @@ const getPayrolls = async (req, res) => {
       query.status = status;
     }
 
-    // Search in employee names
-    if (search) {
-      const employees = await Employee.find({
-        $or: [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } },
-          { employeeId: { $regex: search, $options: 'i' } }
-        ]
-      }).select('_id');
-      
-      const employeeIds = employees.map(emp => emp._id);
-      query.employee = { $in: employeeIds };
-    }
+    // Use paginateQuery utility
+    const options = {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      sort: { year: -1, month: -1, generatedDate: -1 },
+      populate: [
+        {
+          path: 'employee',
+          select: 'firstName lastName employeeId department',
+          populate: { path: 'department', select: 'name code' }
+        },
+        { path: 'generatedBy', select: 'firstName lastName' },
+        { path: 'approvedBy', select: 'firstName lastName' }
+      ]
+    };
 
-    // Execute query with pagination
-    const payrollQuery = Payroll.find(query)
-      .populate('employee', 'firstName lastName employeeId department')
-      .populate('employee.department', 'name')
-      .populate('generatedBy', 'firstName lastName')
-      .populate('approvedBy', 'firstName lastName')
-      .sort({ year: -1, month: -1, generatedDate: -1 });
+    const result = await paginateQuery(Payroll, query, options);
 
-    const result = await paginate(payrollQuery, paginationOptions);
-
-    return successResponse(res, result, 'Payroll records retrieved successfully');
+    return paginatedResponse(res, result.data, result.pagination, 'Payroll records retrieved successfully');
 
   } catch (error) {
     console.error('Get payrolls error:', error);

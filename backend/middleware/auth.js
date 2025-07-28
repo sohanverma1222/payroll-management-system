@@ -114,6 +114,11 @@ const requirePermission = (permission) => {
       });
     }
 
+    // Admin can access everything
+    if (req.user.role === 'admin') {
+      return next();
+    }
+
     if (!req.user.permissions || !req.user.permissions[permission]) {
       return res.status(403).json({
         success: false,
